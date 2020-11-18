@@ -1,0 +1,64 @@
+---
+title: "Homework 5"
+output: github_document
+---
+
+```{r setup, include = FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.asp = .6,
+  out.width = "90%"
+)
+theme_set(theme_minimal() + theme(legend.position = "bottom"))
+options(
+  ggplot2.continuous.colour = "viridis",
+  ggplot2.continuous.fill = "viridis"
+)
+scale_colour_discrete = scale_color_viridis_d
+scale_fill_discrete = scale_fill_viridis_d
+```
+
+
+## Problem 2
+
+### Clean the data
+
+```{r}
+tidy_df = 
+  tibble(
+    files = list.files(path = "data/", full.names = TRUE) 
+         ) %>% 
+  mutate(data = purrr::map(.x = files, read_csv)) %>% 
+  unnest(data) %>% 
+  mutate(arm_id = str_extract_all(files, "(exp_\\d+|con_\\d+)")) %>% 
+  select(-files) %>% 
+  relocate(arm_id) %>% 
+  pivot_longer(
+             week_1:week_8,
+             names_to = "week",
+             names_prefix = "week_",
+             values_to = "measurement"
+             ) %>% 
+  mutate_at(vars(week), as.numeric) %>% 
+  unnest(arm_id) %>% 
+  separate(arm_id, into = c("arm", "subject_id")) 
+tidy_df %>% knitr::kable()
+```
+
+### Make a spaghetti plot
+
+We can see that for the experiment group, the trend is increasing. For the control group, measurement basically stays the same over weeks.
+
+```{r}
+tidy_df %>%
+  unite("arm_id", c(arm, subject_id), sep = "_", remove = F) %>%
+  ggplot(aes(x = week, y = measurement)) +
+  geom_path(aes(color = arm, group = as.factor(arm_id)),alpha = 0.5) +
+  labs(
+    x = "Week",
+    y = "Measurement",
+    title = "Measurement over Weeks"
+    )
+```
+
