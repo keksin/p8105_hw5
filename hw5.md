@@ -432,3 +432,144 @@ tidy_df %>%
 ```
 
 <img src="hw5_files/figure-gfm/unnamed-chunk-2-1.png" width="90%" />
+
+## Problem 3
+
+## Generate the simulation
+
+``` r
+sim_t = function(n = 30, mu = 0, sigma = 5) {
+     x = rnorm(n, mean = mu, sd = sigma)
+     t_test = t.test(x, conf.int = 0.95) %>% broom::tidy()
+     
+     t_test
+  }
+output = vector("list", 5000)
+for (i in 1:5000) {
+  output[[i]] = sim_t()
+}
+output %>% bind_rows() %>% head()
+```
+
+    ## # A tibble: 6 x 8
+    ##   estimate statistic p.value parameter conf.low conf.high method     alternative
+    ##      <dbl>     <dbl>   <dbl>     <dbl>    <dbl>     <dbl> <chr>      <chr>      
+    ## 1   0.395     0.363    0.719        29    -1.83     2.62  One Sampl… two.sided  
+    ## 2  -1.04     -1.47     0.152        29    -2.48     0.405 One Sampl… two.sided  
+    ## 3  -0.559    -0.768    0.449        29    -2.05     0.930 One Sampl… two.sided  
+    ## 4  -0.456    -0.509    0.615        29    -2.29     1.38  One Sampl… two.sided  
+    ## 5  -0.0879   -0.0837   0.934        29    -2.24     2.06  One Sampl… two.sided  
+    ## 6   0.0634    0.0892   0.930        29    -1.39     1.52  One Sampl… two.sided
+
+### A plot showing the power of the test for different true mu
+
+``` r
+sim_mu = function(set){
+  output = vector("list", 5000)
+  for (i in 1:5000) {
+     output[[i]] = sim_t(mu = set)
+     }
+  power = 
+    output %>% 
+    bind_rows() %>% 
+    janitor::clean_names() %>% 
+    select(estimate, p_value) %>% 
+    filter(p_value < 0.05) %>% 
+    count()
+  
+  power
+}
+
+power_of_test =
+  tibble(
+    sample_mu = c(0, 1, 2, 3, 4, 5, 6),
+    reject_time = map(sample_mu, sim_mu)
+  ) %>%  
+  unnest(reject_time) %>% 
+  mutate(t_power = n/5000)
+
+power_of_test %>% 
+ggplot(aes(x = sample_mu, y = t_power)) +
+  geom_point(aes(color = sample_mu), alpha = .5, size = 3) +
+  geom_smooth(alpha = .5, size = 0.5) +
+  labs(
+    x = "The true value of mu",
+    y = "Proportion of times the null was rejected (the power of the test)",
+    title = "The power of the test for different true mu"
+    )
+```
+
+    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
+
+<img src="hw5_files/figure-gfm/unnamed-chunk-4-1.png" width="90%" />
+
+As the true value of mu (effect size) increases, the power increases.
+
+### Compare the average estimate of μ^ of all sample and reject-null-sample
+
+``` r
+sim_mu_hat = function(n = 30, mu = 0, sigma = 5) {
+     sim_data = tibble(
+                           x = rnorm(n, mean = mu, sd = sigma),
+                    )
+     
+     sim_t_test = t.test(pull(sim_data,x), conf.int = 0.95) %>% 
+              broom::tidy() %>% 
+              janitor::clean_names() %>% 
+              select( p_value)
+     
+     
+     sim_data %>% 
+     summarize(
+      mu_hat_all = mean(x),
+      mu_hat_rej = case_when(
+        pull(sim_t_test, p_value) < 0.05 ~ mean(x),
+        pull(sim_t_test, p_value) >= 0.05 ~ as.numeric("")
+      )
+    )
+}
+
+compare_all_reject = function(set){
+  output_mu_hat = vector("list", 5000)
+  for (i in 1:5000) {
+     output_mu_hat[[i]] = sim_mu_hat(mu = set)
+     }
+  
+  output_mu_hat %>% 
+    bind_rows() %>% 
+    summarize(
+      all_sample = mean(mu_hat_all, na.rm = T),
+      reject_sample = mean(mu_hat_rej, na.rm = T)
+    )
+}
+
+mean_muhat =
+  tibble(
+    true_mu = c(0, 1, 2, 3, 4, 5, 6),
+    hat = map(true_mu, compare_all_reject)
+  ) %>%  
+  unnest(hat) %>% 
+  pivot_longer(
+    all_sample:reject_sample,
+    names_to = "samples",
+    values_to = "average_estimate"
+  )
+
+mean_muhat %>% 
+ ggplot(aes(x = true_mu, y = average_estimate, group = samples)) +
+  geom_point(aes(color = samples), alpha = .5, size = 2) +
+  geom_smooth(aes(color = samples), alpha = .5, size = 0.5) +
+  labs(
+    x = "The true value of μ",
+    y = "The average estimate of μ^",
+    title = "Compare the average estimate of μ^ of all sample and reject-null-sample"
+    )
+```
+
+    ## `geom_smooth()` using method = 'loess' and formula 'y ~ x'
+
+<img src="hw5_files/figure-gfm/unnamed-chunk-5-1.png" width="90%" />
+From the plot above we can see that, when true mu equals to 0, the
+estimate mus of rejecting H0 are spreading on upper side of the true mu
+0 until true value of u reaches 4. Thus, the average mu of rejecting H0
+closes to true mean as true mean surpasses 4.
